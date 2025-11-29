@@ -6,21 +6,21 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
-from langchain.chains import RetrievalQA
 from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
 
 
-# -------------------------------
+# -------------------------------------------------------
 # Streamlit UI
-# -------------------------------
+# -------------------------------------------------------
 
 st.set_page_config(page_title="RAG Assistant", layout="wide")
 st.title("📘 Personal Knowledge Assistant (RAG System)")
 
 
-# -------------------------------
-# PDF Loader
-# -------------------------------
+# -------------------------------------------------------
+# Load PDF
+# -------------------------------------------------------
 
 def load_pdf(pdf_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -33,9 +33,9 @@ def load_pdf(pdf_file):
     return text
 
 
-# -------------------------------
-# Vectorstore Creation
-# -------------------------------
+# -------------------------------------------------------
+# Vectorstore
+# -------------------------------------------------------
 
 @st.cache_resource
 def create_vectorstore(text):
@@ -43,6 +43,7 @@ def create_vectorstore(text):
         chunk_size=800,
         chunk_overlap=200
     )
+
     chunks = splitter.split_text(text)
 
     embeddings = HuggingFaceEmbeddings(
@@ -53,27 +54,44 @@ def create_vectorstore(text):
     return vectordb
 
 
-# -------------------------------
-# RAG Pipeline
-# -------------------------------
+# -------------------------------------------------------
+# RAG pipeline (New LangChain Style — works on Cloud)
+# -------------------------------------------------------
 
 def run_rag(vectordb, query):
+
+    retriever = vectordb.as_retriever()
+
     llm = ChatGroq(
         groq_api_key=st.secrets["groq_api_key"],
         model="llama-3.1-8b-instant"
     )
 
-    qa = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=vectordb.as_retriever()
-    )
+    prompt = ChatPromptTemplate.from_template("""
+    You are a helpful assistant. Use ONLY the following context to answer:
 
-    return qa.run(query)
+    Context:
+    {context}
+
+    Question: {question}
+
+    Answer:
+    """)
+
+    # 1. retrieve docs
+    docs = retriever.get_relevant_documents(query)
+    context = "\n\n".join([d.page_content for d in docs])
+
+    # 2. generate answer
+    chain_input = {"context": context, "question": query}
+    response = llm.invoke(prompt.format(**chain_input))
+
+    return response.content
 
 
-# -------------------------------
-# UI Controls
-# -------------------------------
+# -------------------------------------------------------
+# UI
+# -------------------------------------------------------
 
 uploaded = st.file_uploader("Upload a PDF", type="pdf")
 
@@ -87,6 +105,7 @@ if uploaded:
     st.success("Vectorstore ready! Ask anything from your document.")
 
     query = st.text_input("Ask a question:")
+
     if query:
         with st.spinner("Thinking..."):
             answer = run_rag(vectordb, query)
