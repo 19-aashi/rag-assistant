@@ -78,11 +78,15 @@ def run_rag(vectordb, query):
     Answer:
     """)
 
-    # 1. retrieve docs
-    docs = retriever.get_relevant_documents(query)
-    context = "\n\n".join([d.page_content for d in docs])
+    # New correct call for latest LangChain retrievers
+    docs = retriever.invoke(query)
 
-    # 2. generate answer
+    # docs is a list of Document objects
+    if isinstance(docs, list):
+        context = "\n\n".join([d.page_content for d in docs])
+    else:
+        context = docs.page_content
+
     chain_input = {"context": context, "question": query}
     response = llm.invoke(prompt.format(**chain_input))
 
