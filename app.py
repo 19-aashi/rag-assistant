@@ -4,7 +4,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
-from langchain.chains import RetrievalQA
+from langchain_community.chains import RetrievalQA
 import tempfile
 
 st.set_page_config(page_title="Personal Knowledge Assistant", layout="wide")
