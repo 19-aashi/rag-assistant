@@ -1,33 +1,61 @@
 import streamlit as st
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
-from langchain_community.chains import RetrievalQA
 import tempfile
 
-st.set_page_config(page_title="Personal Knowledge Assistant", layout="wide")
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+
+from langchain.chains import RetrievalQA
+from langchain_groq import ChatGroq
+
+
+# -------------------------------
+# Streamlit UI
+# -------------------------------
+
+st.set_page_config(page_title="RAG Assistant", layout="wide")
 st.title("📘 Personal Knowledge Assistant (RAG System)")
+
+
+# -------------------------------
+# PDF Loader
+# -------------------------------
 
 def load_pdf(pdf_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(pdf_file.read())
-        tmp_path = tmp.name
+        path = tmp.name
 
-    loader = PyPDFLoader(tmp_path)
+    loader = PyPDFLoader(path)
     pages = loader.load()
-    return "".join([p.page_content for p in pages])
+    text = "\n".join([p.page_content for p in pages])
+    return text
+
+
+# -------------------------------
+# Vectorstore Creation
+# -------------------------------
 
 @st.cache_resource
 def create_vectorstore(text):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800,
+        chunk_overlap=200
+    )
     chunks = splitter.split_text(text)
 
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
 
     vectordb = Chroma.from_texts(chunks, embedding=embeddings)
     return vectordb
+
+
+# -------------------------------
+# RAG Pipeline
+# -------------------------------
 
 def run_rag(vectordb, query):
     llm = ChatGroq(
@@ -42,18 +70,26 @@ def run_rag(vectordb, query):
 
     return qa.run(query)
 
+
+# -------------------------------
+# UI Controls
+# -------------------------------
+
 uploaded = st.file_uploader("Upload a PDF", type="pdf")
 
 if uploaded:
     st.success("PDF uploaded successfully!")
 
-    text = load_pdf(uploaded)
-    vectordb = create_vectorstore(text)
+    with st.spinner("Processing PDF... (first time takes longer)"):
+        text = load_pdf(uploaded)
+        vectordb = create_vectorstore(text)
+
+    st.success("Vectorstore ready! Ask anything from your document.")
 
     query = st.text_input("Ask a question:")
-
     if query:
-        with st.spinner("Generating answer..."):
+        with st.spinner("Thinking..."):
             answer = run_rag(vectordb, query)
-        st.write("### Answer:")
+
+        st.subheader("Answer:")
         st.write(answer)
